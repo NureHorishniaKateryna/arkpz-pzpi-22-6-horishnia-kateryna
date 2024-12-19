@@ -41,12 +41,10 @@
 
 1.4 Список використаних джерел
 1. AWS (Amazon Web Services) – офіційний сайт. URL: https://aws.amazon.com (дата звернення: 15.12.2024).
-2. Microsoft Azure – офіційний сайт. URL: https://azure.microsoft.com (дата звернення: 15.12.2024).
-3. Flask Framework – офіційна документація. URL: https://flask.palletsprojects.com (дата звернення: 15.12.2024).
-4. PostgreSQL – офіційна документація. URL: https://www.postgresql.org (дата звернення: 15.12.2024).
-5. MQTT Protocol – офіційна документація. URL: https://mqtt.org (дата звернення: 15.12.2024).
-6. DBeaver – офіційний сайт. URL: https://dbeaver.io (дата звернення: 15.12.2024).
-7. Postman – офіційний сайт. URL: https://www.postman.com (дата звернення: 15.12.2024).
+2. Flask Framework – офіційна документація. URL: https://flask.palletsprojects.com (дата звернення: 15.12.2024).
+3. PostgreSQL – офіційна документація. URL: https://www.postgresql.org (дата звернення: 15.12.2024).
+4. MQTT Protocol – офіційна документація. URL: https://mqtt.org (дата звернення: 15.12.2024).
+5. Postman – офіційний сайт. URL: https://www.postman.com (дата звернення: 15.12.2024).
 
 1.5 Посилання
 Посилання на GitHub репозиторій: 
