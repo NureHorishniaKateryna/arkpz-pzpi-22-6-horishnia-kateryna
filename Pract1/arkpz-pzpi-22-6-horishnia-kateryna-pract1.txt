@@ -180,8 +180,8 @@
 
 1.5 Посилання
 Посилання на GitHub репозиторій: 
-https://github.com/NureHorishniaKateryna/arkpz-pzpi-22-6-horishnia-kateryna/ tree/main/Pract1
-Посилання на відео доповіді: https://youtu.be/
+https://github.com/NureHorishniaKateryna/arkpz-pzpi-22-6-horishnia-kateryna/tree/main/Pract1
+Посилання на відео доповіді: https://youtu.be/xYNuYW0PACY
 
 Додаток А
 Слайди презентації
@@ -219,4 +219,3 @@ https://github.com/NureHorishniaKateryna/arkpz-pzpi-22-6-horishnia-kateryna/ tre
 Рисунок А.16 – Список використаних джерел
 
 Рисунок А.17 – Завершальний слайд
-     
