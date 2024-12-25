@@ -1,9 +1,15 @@
+import json
+import logging
 from datetime import datetime, UTC
+from os import environ
 from time import time
+import ssl
 
 import bcrypt
 import jwt
+from flask_mqtt import Mqtt
 from flask_openapi3 import OpenAPI
+from paho.mqtt.client import MQTTv31, MQTTv311
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -13,15 +19,65 @@ from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateReques
     DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery, \
     DeviceReportRequest, PaginationQuery, UserPath, EditUserRequest
 
+logging.basicConfig(level=logging.DEBUG)
+
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
-JWT_KEY = b"0123456789abcdef"  # urandom(16)
-# app.config["SQLALCHEMY_DATABASE_URL"] = "sqlite://test.db"
+JWT_KEY = b"0123456789abcdef"
+app.config["MQTT_BROKER_URL"] = environ["MQTT_HOST"]
+app.config["MQTT_BROKER_PORT"] = int(environ["MQTT_PORT"])
+app.config["MQTT_USERNAME"] = environ["MQTT_USER"]
+app.config["MQTT_PASSWORD"] = environ["MQTT_PASSWORD"]
+app.config["MQTT_KEEPALIVE"] = 60
+app.config["MQTT_TLS_ENABLED"] = True
+app.config["MQTT_TLS_INSECURE"] = False
+app.config["MQTT_TLS_VERSION"] = ssl.PROTOCOL_TLSv1_2
+
+mqtt = Mqtt(app)
 
 engine = create_engine("sqlite:///test.db")
 ModelsBase.metadata.create_all(engine)
 DBSession = sessionmaker(engine)
 session = DBSession()
+
+
+#@mqtt.on_log()
+#def handle_logging(client, userdata, level, buf):
+#    print(f"{level}: {buf}")
+
+
+@mqtt.on_connect()
+def handle_mqtt_connect(client, userdata, flags, rc):
+    mqtt.subscribe("lights-reports")
+
+
+@mqtt.on_message()
+def handle_mqtt_message(client, userdata, message):
+    try:
+        payload = json.loads(message.payload)
+    except ValueError:
+        return
+
+    if message.topic != "lights-reports":
+        return
+
+    if "enabled" not in payload or "enabled_for" not in payload or "token" not in payload:
+        return
+
+    if not isinstance(payload["enabled"], bool) or not isinstance(payload["enabled_for"], (int, type(None))):
+        return
+
+    try:
+        device = auth_device(payload["token"])
+    except NotAuthorizedError:
+        return
+
+    report = DeviceReport(
+        device=device, time=datetime.now(UTC), enabled=payload["enabled"],
+        enabled_for=payload["enabled_for"] if payload["enabled"] else None
+    )
+    session.add(report)
+    session.commit()
 
 
 @app.errorhandler(NotAuthorizedError)
@@ -176,6 +232,7 @@ def edit_device_config(path: DevicePath, body: DeviceConfigEditRequest, header: 
     if body.enabled_manually is not None or body.enabled_auto is not None or body.electricity_price is not None:
         session.commit()
 
+    mqtt.publish(f"config/{device.id}/{device.api_key}", json.dumps(device.configuration.to_json()).encode("utf8"))
     return device.to_json()
 
 
@@ -216,6 +273,11 @@ def add_device_schedule_item(path: DevicePath, body: DeviceScheduleAddRequest, h
     session.add(schedule)
     session.commit()
 
+    mqtt.publish(f"schedule/{device.id}/{device.api_key}", json.dumps({
+        "action": "add",
+        **schedule.to_json(),
+    }).encode("utf8"))
+
     return schedule.to_json()
 
 
@@ -231,6 +293,9 @@ def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddReque
         return {"error": "Unknown device!"}, 404
 
     session.query(DeviceSchedule).filter_by(device=device, id=path.schedule_id).delete()
+    mqtt.publish(f"schedule/{device.id}/{device.api_key}", json.dumps({
+        "action": "refetch",
+    }).encode("utf8"))
 
     return "", 204
 
