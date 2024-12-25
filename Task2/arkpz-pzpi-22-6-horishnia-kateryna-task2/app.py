@@ -6,9 +6,9 @@ from flask_openapi3 import OpenAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration
+from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration, DeviceSchedule
 from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateRequest, AuthHeaders, DeviceEditRequest, \
-    DeviceConfigEditRequest, DevicePath
+    DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath
 
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
@@ -67,13 +67,12 @@ def login(body: RegisterRequest):
 @app.get("/api/devices")
 def get_user_devices(query: UserDevicesQuery, header: AuthHeaders):
     token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(
-        UserSession.id == token["session"]).scalar()
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
     if user is None:
         return {"error": "Not authorized!"}, 401
 
-    query = session.query(IotDevice).filter_by(user=user).join(DeviceConfiguration).limit(query.page_size).offset(
-        (query.page - 1) * query.page_size)
+    query = session.query(IotDevice).filter_by(user=user).join(DeviceConfiguration)\
+        .limit(query.page_size).offset((query.page - 1) * query.page_size)
 
     return {
         "count": query.count(),
@@ -84,8 +83,7 @@ def get_user_devices(query: UserDevicesQuery, header: AuthHeaders):
 @app.post("/api/devices")
 def create_device(body: DeviceCreateRequest, header: AuthHeaders):
     token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(
-        UserSession.id == token["session"]).scalar()
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
     if user is None:
         return {"error": "Not authorized!"}, 401
 
@@ -101,8 +99,7 @@ def create_device(body: DeviceCreateRequest, header: AuthHeaders):
 @app.get("/api/devices/<int:device_id>")
 def get_device(path: DevicePath, header: AuthHeaders):
     token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(
-        UserSession.id == token["session"]).scalar()
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
     if user is None:
         return {"error": "Not authorized!"}, 401
 
@@ -116,8 +113,7 @@ def get_device(path: DevicePath, header: AuthHeaders):
 @app.patch("/api/devices/<int:device_id>")
 def edit_device(path: DevicePath, body: DeviceEditRequest, header: AuthHeaders):
     token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(
-        UserSession.id == token["session"]).scalar()
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
     if user is None:
         return {"error": "Not authorized!"}, 401
 
@@ -135,8 +131,7 @@ def edit_device(path: DevicePath, body: DeviceEditRequest, header: AuthHeaders):
 @app.patch("/api/devices/<int:device_id>/config")
 def edit_device_config(path: DevicePath, body: DeviceConfigEditRequest, header: AuthHeaders):
     token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(
-        UserSession.id == token["session"]).scalar()
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
     if user is None:
         return {"error": "Not authorized!"}, 401
 
@@ -160,12 +155,67 @@ def edit_device_config(path: DevicePath, body: DeviceConfigEditRequest, header: 
 @app.delete("/api/devices/<int:device_id>")
 def delete_device(path: DevicePath, header: AuthHeaders):
     token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(
-        UserSession.id == token["session"]).scalar()
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
     if user is None:
         return {"error": "Not authorized!"}, 401
 
     session.query(IotDevice).filter_by(id=path.device_id, user=user).delete()
+
+    return "", 204
+
+
+@app.get("/api/devices/<int:device_id>/schedule")
+def get_device_schedule(path: DevicePath, header: AuthHeaders):
+    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
+    if user is None:
+        return {"error": "Not authorized!"}, 401
+
+    device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
+    if device is None:
+        return {"error": "Unknown device!"}, 404
+
+    schedule_items = session.query(DeviceSchedule).filter_by(device=device).order_by("start_hour").all()
+
+    return [schedule.to_json() for schedule in schedule_items]
+
+
+@app.post("/api/devices/<int:device_id>/schedule")
+def add_device_schedule_item(path: DevicePath, body: DeviceScheduleAddRequest, header: AuthHeaders):
+    if body.start_hour >= body.end_hour:
+        return {"error": "End hour cannot be less than start hour!"}, 400
+
+    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
+    if user is None:
+        return {"error": "Not authorized!"}, 401
+
+    device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
+    if device is None:
+        return {"error": "Unknown device!"}, 404
+
+    schedule = DeviceSchedule(device=device, start_hour=body.start_hour, end_hour=body.end_hour)
+    session.add(schedule)
+    session.commit()
+
+    return schedule.to_json()
+
+
+@app.post("/api/devices/<int:device_id>/schedule/<int:schedule_id>")
+def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddRequest, header: AuthHeaders):
+    if body.start_hour >= body.end_hour:
+        return {"error": "End hour cannot be less than start hour!"}, 400
+
+    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
+    if user is None:
+        return {"error": "Not authorized!"}, 401
+
+    device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
+    if device is None:
+        return {"error": "Unknown device!"}, 404
+
+    session.query(DeviceSchedule).filter_by(device=device, id=path.schedule_id).delete()
 
     return "", 204
 

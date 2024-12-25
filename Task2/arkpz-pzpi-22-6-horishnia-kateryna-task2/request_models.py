@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):
@@ -34,3 +34,12 @@ class DeviceConfigEditRequest(BaseModel):
 
 class DevicePath(BaseModel):
     device_id: int
+
+
+class DeviceScheduleAddRequest(BaseModel):
+    start_hour: int = Field(ge=0, le=23)
+    end_hour: int = Field(ge=0, le=23)
+
+
+class SchedulePath(DevicePath):
+    schedule_id: int

@@ -79,4 +79,10 @@ class DeviceSchedule(ModelsBase):
     start_hour: int = Column(Integer, nullable=False)
     end_hour: int = Column(Integer, nullable=False)
 
+    def to_json(self) -> dict:
+        return {
+            "start_hour": self.start_hour,
+            "end_hour": self.end_hour,
+        }
+
 
