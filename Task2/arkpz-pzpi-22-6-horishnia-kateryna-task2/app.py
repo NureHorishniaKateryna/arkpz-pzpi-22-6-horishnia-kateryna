@@ -90,7 +90,7 @@ def create_device(body: DeviceCreateRequest, header: AuthHeaders):
         return {"error": "Not authorized!"}, 401
 
     device = IotDevice(user=user, name=body.name)
-    config = DeviceConfiguration(device=device)
+    config = DeviceConfiguration(device=device, electricity_price=body.electricity_price)
     session.add(device)
     session.add(config)
     session.commit()
@@ -148,8 +148,10 @@ def edit_device_config(path: DevicePath, body: DeviceConfigEditRequest, header: 
         device.configuration.enabled = body.enabled_manually
     if body.enabled_auto is not None:
         device.configuration.enabled_auto = body.enabled_auto
+    if body.electricity_price is not None:
+        device.configuration.electricity_price = body.electricity_price
 
-    if body.enabled_manually is not None or body.enabled_auto is not None:
+    if body.enabled_manually is not None or body.enabled_auto is not None or body.electricity_price is not None:
         session.commit()
 
     return device.to_json()

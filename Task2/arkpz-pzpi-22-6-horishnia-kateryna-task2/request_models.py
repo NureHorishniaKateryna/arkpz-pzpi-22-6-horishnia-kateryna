@@ -15,6 +15,7 @@ class UserDevicesQuery(BaseModel):
 
 class DeviceCreateRequest(BaseModel):
     name: str
+    electricity_price: float
 
 
 class AuthHeaders(BaseModel):
@@ -28,6 +29,7 @@ class DeviceEditRequest(BaseModel):
 class DeviceConfigEditRequest(BaseModel):
     enabled_manually: bool | None = None
     enabled_auto: bool | None = None
+    electricity_price: float | None = None
 
 
 class DevicePath(BaseModel):

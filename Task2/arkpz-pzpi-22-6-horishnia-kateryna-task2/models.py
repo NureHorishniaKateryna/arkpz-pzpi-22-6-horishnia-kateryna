@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from os import urandom
 
-from sqlalchemy import Column, Integer, Boolean, String, create_engine, ForeignKey
+from sqlalchemy import Column, Integer, Boolean, String, create_engine, ForeignKey, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -60,11 +60,13 @@ class DeviceConfiguration(ModelsBase):
     device = relationship("IotDevice", back_populates="configuration")
     enabled: bool = Column(Boolean, nullable=False, default=True)
     enabled_auto: bool = Column(Boolean, nullable=False, default=True)
+    electricity_price: float = Column(Float, nullable=False)
 
     def to_json(self) -> dict:
         return {
             "enabled_manually": self.enabled,
             "enabled_auto": self.enabled_auto,
+            "electricity_price": self.electricity_price,
         }
 
 
