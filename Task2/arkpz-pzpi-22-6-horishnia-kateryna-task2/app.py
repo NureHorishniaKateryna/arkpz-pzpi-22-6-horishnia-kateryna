@@ -235,5 +235,45 @@ def get_device_config(header: AuthHeaders):
     return device.configuration.to_json()
 
 
+@app.get("/api/admin/users")
+def admin_get_users(header: AuthHeaders):
+    ...
+
+
+@app.get("/api/admin/users/<int:user_id>")
+def admin_get_user(header: AuthHeaders):
+    ...
+
+
+@app.patch("/api/admin/users/<int:user_id>")
+def admin_edit_user(header: AuthHeaders):
+    ...
+
+
+@app.delete("/api/admin/users/<int:user_id>")
+def admin_delete_user(header: AuthHeaders):
+    ...
+
+
+@app.get("/api/admin/devices")
+def admin_get_devices(header: AuthHeaders):
+    ...
+
+
+@app.get("/api/admin/devices/<int:device_id>")
+def admin_get_device(header: AuthHeaders):
+    ...
+
+
+@app.patch("/api/admin/users/<int:device_id>")
+def admin_edit_device(header: AuthHeaders):
+    ...
+
+
+@app.delete("/api/admin/users/<int:device_id>")
+def admin_delete_device(header: AuthHeaders):
+    ...
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=9090, debug=True, reload=True)
