@@ -223,7 +223,7 @@ def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddReque
 
 
 @app.get("/api/devices/<int:device_id>/reports")
-def get_user_devices(path: DevicePath, query: DeviceReportsQuery, header: AuthHeaders):
+def get_device_reports(path: DevicePath, query: DeviceReportsQuery, header: AuthHeaders):
     token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
     user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
     if user is None:
