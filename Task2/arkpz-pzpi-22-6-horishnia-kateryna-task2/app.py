@@ -168,5 +168,20 @@ def delete_device(path: DevicePath, header: AuthHeaders):
     return "", 204
 
 
+@app.get("/api/device/config")
+def get_device_config(header: AuthHeaders):
+    try:
+        device_id, key = header.token.split(".")
+        device_id = int(device_id)
+    except ValueError:
+        return {"error": "Not authorized!"}, 401
+
+    device = session.query(IotDevice).filter_by(id=device_id, api_key=key).join(DeviceConfiguration).scalar()
+    if device is None:
+        return {"error": "Not authorized!"}, 401
+
+    return device.configuration.to_json()
+
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=9090, debug=True, reload=True)
