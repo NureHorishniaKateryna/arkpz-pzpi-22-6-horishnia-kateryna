@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
 from os import urandom
 
-from sqlalchemy import Column, Integer, Boolean, String, create_engine, ForeignKey, Float
+from sqlalchemy import Column, Integer, Boolean, String, create_engine, ForeignKey, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -86,3 +87,19 @@ class DeviceSchedule(ModelsBase):
         }
 
 
+class DeviceReport(ModelsBase):
+    __tablename__ = "device_reports"
+
+    id: int = Column(Integer, primary_key=True)
+    device_id: int = Column(Integer, ForeignKey("iot_devices.id"))
+    device = relationship("IotDevice")
+    time: datetime = Column(DateTime, nullable=False)
+    enabled: bool = Column(Boolean, nullable=False)
+    enabled_for: int = Column(Integer, nullable=True, default=None)
+
+    def to_json(self) -> dict:
+        return {
+            "time": self.time,
+            "enabled": self.enabled,
+            "enabled_for": self.enabled_for,
+        }

@@ -43,3 +43,8 @@ class DeviceScheduleAddRequest(BaseModel):
 
 class SchedulePath(DevicePath):
     schedule_id: int
+
+
+class DeviceReportsQuery(BaseModel):
+    page: int = 1
+    page_size: int = 25

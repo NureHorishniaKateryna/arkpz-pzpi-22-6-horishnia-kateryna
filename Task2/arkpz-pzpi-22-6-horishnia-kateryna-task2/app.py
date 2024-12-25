@@ -6,9 +6,9 @@ from flask_openapi3 import OpenAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration, DeviceSchedule
+from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration, DeviceSchedule, DeviceReport
 from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateRequest, AuthHeaders, DeviceEditRequest, \
-    DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath
+    DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery
 
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
@@ -71,12 +71,14 @@ def get_user_devices(query: UserDevicesQuery, header: AuthHeaders):
     if user is None:
         return {"error": "Not authorized!"}, 401
 
-    query = session.query(IotDevice).filter_by(user=user).join(DeviceConfiguration)\
-        .limit(query.page_size).offset((query.page - 1) * query.page_size)
+    query_ = session.query(IotDevice).filter_by(user=user).join(DeviceConfiguration)
+
+    count = query_.count()
+    query_ = query_.limit(query.page_size).offset((query.page - 1) * query.page_size)
 
     return {
-        "count": query.count(),
-        "result": [device.to_json() for device in query.all()],
+        "count": count,
+        "result": [device.to_json() for device in query_.all()],
     }
 
 
@@ -220,6 +222,25 @@ def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddReque
     return "", 204
 
 
+@app.get("/api/devices/<int:device_id>/reports")
+def get_user_devices(path: DevicePath, query: DeviceReportsQuery, header: AuthHeaders):
+    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
+    if user is None:
+        return {"error": "Not authorized!"}, 401
+
+    device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
+    query_ = session.query(DeviceReport).filter_by(device=device).order_by("time")
+
+    count = query_.count()
+    query_ = query_.limit(query.page_size).offset((query.page - 1) * query.page_size)
+
+    return {
+        "count": count,
+        "result": [report.to_json() for report in query_.all()],
+    }
+
+
 @app.get("/api/device/config")
 def get_device_config(header: AuthHeaders):
     try:
@@ -233,6 +254,11 @@ def get_device_config(header: AuthHeaders):
         return {"error": "Not authorized!"}, 401
 
     return device.configuration.to_json()
+
+
+@app.post("/api/device/report")
+def report_device_state(header: AuthHeaders):
+    ...
 
 
 @app.get("/api/admin/users")
