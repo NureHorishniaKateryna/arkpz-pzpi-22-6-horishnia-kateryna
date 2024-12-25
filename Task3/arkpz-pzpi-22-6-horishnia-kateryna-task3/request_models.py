@@ -58,3 +58,7 @@ class DeviceReportRequest(BaseModel):
 class PaginationQuery(BaseModel):
     page: int = 1
     page_size: int = 25
+
+
+class UserPath(BaseModel):
+    user_id: int

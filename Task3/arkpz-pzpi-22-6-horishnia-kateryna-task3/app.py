@@ -11,7 +11,7 @@ from errors import NotAuthorizedError
 from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration, DeviceSchedule, DeviceReport
 from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateRequest, AuthHeaders, DeviceEditRequest, \
     DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery, \
-    DeviceReportRequest, PaginationQuery
+    DeviceReportRequest, PaginationQuery, UserPath
 
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
@@ -287,24 +287,26 @@ def admin_get_users(query: PaginationQuery, header: AuthHeaders):
 
 
 @app.get("/api/admin/users/<int:user_id>")
-def admin_get_user(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_get_user(path: UserPath, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    user = session.query(User).filter_by(id=path.user_id).scalar()
+    return user.to_json()
 
 
 @app.patch("/api/admin/users/<int:user_id>")
-def admin_edit_user(header: AuthHeaders):
+def admin_edit_user(path: UserPath, header: AuthHeaders):
     user = auth_admin(header.token)
 
     # TODO
 
 
 @app.delete("/api/admin/users/<int:user_id>")
-def admin_delete_user(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_delete_user(path: UserPath, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    session.query(User).filter_by(id=path.user_id).delete()
+    return "", 204
 
 
 @app.get("/api/admin/devices")
@@ -323,24 +325,26 @@ def admin_get_devices(query: PaginationQuery, header: AuthHeaders):
 
 
 @app.get("/api/admin/devices/<int:device_id>")
-def admin_get_device(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_get_device(path: DevicePath, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    device = session.query(IotDevice).filter_by(id=path.device_id).scalar()
+    return device.to_json()
 
 
 @app.patch("/api/admin/users/<int:device_id>")
-def admin_edit_device(header: AuthHeaders):
+def admin_edit_device(path: DevicePath, header: AuthHeaders):
     user = auth_admin(header.token)
 
     # TODO
 
 
 @app.delete("/api/admin/users/<int:device_id>")
-def admin_delete_device(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_delete_device(path: DevicePath, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    session.query(IotDevice).filter_by(id=path.device_id).delete()
+    return "", 204
 
 
 if __name__ == "__main__":
