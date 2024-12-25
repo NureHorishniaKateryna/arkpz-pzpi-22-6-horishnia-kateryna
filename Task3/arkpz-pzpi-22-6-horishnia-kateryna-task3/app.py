@@ -308,7 +308,7 @@ def admin_edit_user(path: UserPath, body: EditUserRequest, header: AuthHeaders):
     if body.email is not None:
         user.email = body.email
     if body.password is not None:
-        user.password = bcrypt.hashpw(body.password, bcrypt.gensalt())
+        user.password = bcrypt.hashpw(body.password.encode("utf8"), bcrypt.gensalt())
     if body.first_name is not None:
         user.first_name = body.first_name
     if body.last_name is not None:
@@ -352,10 +352,20 @@ def admin_get_device(path: DevicePath, header: AuthHeaders):
 
 
 @app.patch("/api/admin/users/<int:device_id>")
-def admin_edit_device(path: DevicePath, header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_edit_device(path: DevicePath, body: DeviceEditRequest, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    device = session.query(IotDevice).filter_by(id=path.device_id).scalar()
+    if device is None:
+        return {"error": "Unknown device!"}, 404
+
+    if body.name is not None:
+        device.name = body.name
+
+    if body.name is not None:
+        session.commit()
+
+    return device.to_json()
 
 
 @app.delete("/api/admin/users/<int:device_id>")
