@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+from os import urandom
+
 from sqlalchemy import Column, Integer, Boolean, String, create_engine, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
 ModelsBase = declarative_base()
+
+
+def gen_device_api_key() -> str:
+    return urandom(16).hex()
+
 
 class User(ModelsBase):
     __tablename__ = "users"
@@ -32,6 +39,7 @@ class IotDevice(ModelsBase):
     user_id: int = Column(Integer, ForeignKey("users.id"))
     user = relationship("User")
     name: str = Column(String(64), nullable=False)
+    api_key: str = Column(String(32), nullable=False, default=gen_device_api_key)
     configuration = relationship("DeviceConfiguration", uselist=False, back_populates="device")
 
     def to_json(self) -> dict:
@@ -39,6 +47,7 @@ class IotDevice(ModelsBase):
             "id": self.id,
             "user_id": self.user_id,
             "name": self.name,
+            "api_key": f"{self.id}.{self.api_key}",
             "configuration": self.configuration.to_json(),
         }
 
