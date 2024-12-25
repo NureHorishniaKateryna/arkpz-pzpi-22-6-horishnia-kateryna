@@ -48,3 +48,8 @@ class SchedulePath(DevicePath):
 class DeviceReportsQuery(BaseModel):
     page: int = 1
     page_size: int = 25
+
+
+class DeviceReportRequest(BaseModel):
+    enabled: bool
+    was_enabled_for: int | None = None

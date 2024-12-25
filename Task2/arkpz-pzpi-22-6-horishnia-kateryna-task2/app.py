@@ -1,3 +1,4 @@
+from datetime import datetime, UTC
 from time import time
 
 import bcrypt
@@ -6,9 +7,10 @@ from flask_openapi3 import OpenAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from errors import NotAuthorizedError
 from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration, DeviceSchedule, DeviceReport
 from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateRequest, AuthHeaders, DeviceEditRequest, \
-    DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery
+    DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery, DeviceReportRequest
 
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
@@ -19,6 +21,43 @@ engine = create_engine("sqlite:///test.db")
 ModelsBase.metadata.create_all(engine)
 DBSession = sessionmaker(engine)
 session = DBSession()
+
+
+@app.errorhandler(NotAuthorizedError)
+def handle_not_authorized(_):
+    return {"error": "Not authorized!"}, 401
+
+
+def auth_user(token: str) -> User:
+    token = jwt.decode(token, JWT_KEY, algorithms=["HS256"])
+    user = session.query(User).filter_by(id=token["user"]).join(UserSession) \
+        .filter(UserSession.id == token["session"]).scalar()
+    if user is None:
+        raise NotAuthorizedError
+
+    return user
+
+
+def auth_admin(token: str) -> User:
+    user = auth_user(token)
+    if not user.is_admin:
+        raise NotAuthorizedError
+
+    return user
+
+
+def auth_device(token: str) -> IotDevice:
+    try:
+        device_id, key = token.split(".")
+        device_id = int(device_id)
+    except ValueError:
+        raise NotAuthorizedError
+
+    device = session.query(IotDevice).filter_by(id=device_id, api_key=key).join(DeviceConfiguration).scalar()
+    if device is None:
+        raise NotAuthorizedError
+
+    return device
 
 
 @app.post("/api/auth/register")
@@ -66,10 +105,7 @@ def login(body: RegisterRequest):
 
 @app.get("/api/devices")
 def get_user_devices(query: UserDevicesQuery, header: AuthHeaders):
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     query_ = session.query(IotDevice).filter_by(user=user).join(DeviceConfiguration)
 
@@ -84,10 +120,7 @@ def get_user_devices(query: UserDevicesQuery, header: AuthHeaders):
 
 @app.post("/api/devices")
 def create_device(body: DeviceCreateRequest, header: AuthHeaders):
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     device = IotDevice(user=user, name=body.name)
     config = DeviceConfiguration(device=device, electricity_price=body.electricity_price)
@@ -100,10 +133,7 @@ def create_device(body: DeviceCreateRequest, header: AuthHeaders):
 
 @app.get("/api/devices/<int:device_id>")
 def get_device(path: DevicePath, header: AuthHeaders):
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
     if device is None:
@@ -114,10 +144,7 @@ def get_device(path: DevicePath, header: AuthHeaders):
 
 @app.patch("/api/devices/<int:device_id>")
 def edit_device(path: DevicePath, body: DeviceEditRequest, header: AuthHeaders):
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
     if device is None:
@@ -132,10 +159,7 @@ def edit_device(path: DevicePath, body: DeviceEditRequest, header: AuthHeaders):
 
 @app.patch("/api/devices/<int:device_id>/config")
 def edit_device_config(path: DevicePath, body: DeviceConfigEditRequest, header: AuthHeaders):
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
     if device is None:
@@ -156,10 +180,7 @@ def edit_device_config(path: DevicePath, body: DeviceConfigEditRequest, header: 
 
 @app.delete("/api/devices/<int:device_id>")
 def delete_device(path: DevicePath, header: AuthHeaders):
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     session.query(IotDevice).filter_by(id=path.device_id, user=user).delete()
 
@@ -168,10 +189,7 @@ def delete_device(path: DevicePath, header: AuthHeaders):
 
 @app.get("/api/devices/<int:device_id>/schedule")
 def get_device_schedule(path: DevicePath, header: AuthHeaders):
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
     if device is None:
@@ -187,10 +205,7 @@ def add_device_schedule_item(path: DevicePath, body: DeviceScheduleAddRequest, h
     if body.start_hour >= body.end_hour:
         return {"error": "End hour cannot be less than start hour!"}, 400
 
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
     if device is None:
@@ -208,10 +223,7 @@ def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddReque
     if body.start_hour >= body.end_hour:
         return {"error": "End hour cannot be less than start hour!"}, 400
 
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
     if device is None:
@@ -224,10 +236,7 @@ def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddReque
 
 @app.get("/api/devices/<int:device_id>/reports")
 def get_device_reports(path: DevicePath, query: DeviceReportsQuery, header: AuthHeaders):
-    token = jwt.decode(header.token, JWT_KEY, algorithms=["HS256"])
-    user = session.query(User).filter_by(id=token["user"]).join(UserSession).filter(UserSession.id == token["session"]).scalar()
-    if user is None:
-        return {"error": "Not authorized!"}, 401
+    user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
     query_ = session.query(DeviceReport).filter_by(device=device).order_by("time")
@@ -243,62 +252,78 @@ def get_device_reports(path: DevicePath, query: DeviceReportsQuery, header: Auth
 
 @app.get("/api/device/config")
 def get_device_config(header: AuthHeaders):
-    try:
-        device_id, key = header.token.split(".")
-        device_id = int(device_id)
-    except ValueError:
-        return {"error": "Not authorized!"}, 401
-
-    device = session.query(IotDevice).filter_by(id=device_id, api_key=key).join(DeviceConfiguration).scalar()
-    if device is None:
-        return {"error": "Not authorized!"}, 401
-
+    device = auth_device(header.token)
     return device.configuration.to_json()
 
 
 @app.post("/api/device/report")
-def report_device_state(header: AuthHeaders):
-    ...
+def report_device_state(body: DeviceReportRequest, header: AuthHeaders):
+    device = auth_device(header.token)
+
+    report = DeviceReport(
+        device=device, time=datetime.now(UTC), enabled=body.enabled,
+        enabled_for=body.enabled_for if body.enabled else None
+    )
+    session.add(report)
+    session.commit()
+
+    return "", 204
 
 
 @app.get("/api/admin/users")
 def admin_get_users(header: AuthHeaders):
-    ...
+    user = auth_admin(header.token)
+
+    # TODO
 
 
 @app.get("/api/admin/users/<int:user_id>")
 def admin_get_user(header: AuthHeaders):
-    ...
+    user = auth_admin(header.token)
+
+    # TODO
 
 
 @app.patch("/api/admin/users/<int:user_id>")
 def admin_edit_user(header: AuthHeaders):
-    ...
+    user = auth_admin(header.token)
+
+    # TODO
 
 
 @app.delete("/api/admin/users/<int:user_id>")
 def admin_delete_user(header: AuthHeaders):
-    ...
+    user = auth_admin(header.token)
+
+    # TODO
 
 
 @app.get("/api/admin/devices")
 def admin_get_devices(header: AuthHeaders):
-    ...
+    user = auth_admin(header.token)
+
+    # TODO
 
 
 @app.get("/api/admin/devices/<int:device_id>")
 def admin_get_device(header: AuthHeaders):
-    ...
+    user = auth_admin(header.token)
+
+    # TODO
 
 
 @app.patch("/api/admin/users/<int:device_id>")
 def admin_edit_device(header: AuthHeaders):
-    ...
+    user = auth_admin(header.token)
+
+    # TODO
 
 
 @app.delete("/api/admin/users/<int:device_id>")
 def admin_delete_device(header: AuthHeaders):
-    ...
+    user = auth_admin(header.token)
+
+    # TODO
 
 
 if __name__ == "__main__":
