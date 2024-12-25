@@ -11,7 +11,7 @@ from errors import NotAuthorizedError
 from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration, DeviceSchedule, DeviceReport
 from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateRequest, AuthHeaders, DeviceEditRequest, \
     DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery, \
-    DeviceReportRequest, PaginationQuery, UserPath
+    DeviceReportRequest, PaginationQuery, UserPath, EditUserRequest
 
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
@@ -291,14 +291,33 @@ def admin_get_user(path: UserPath, header: AuthHeaders):
     auth_admin(header.token)
 
     user = session.query(User).filter_by(id=path.user_id).scalar()
+    if user is None:
+        return {"error": "Unknown user!"}, 404
+
     return user.to_json()
 
 
 @app.patch("/api/admin/users/<int:user_id>")
-def admin_edit_user(path: UserPath, header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_edit_user(path: UserPath, body: EditUserRequest, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    user = session.query(User).filter_by(id=path.user_id).scalar()
+    if user is None:
+        return {"error": "Unknown user!"}, 404
+
+    if body.email is not None:
+        user.email = body.email
+    if body.password is not None:
+        user.password = bcrypt.hashpw(body.password, bcrypt.gensalt())
+    if body.first_name is not None:
+        user.first_name = body.first_name
+    if body.last_name is not None:
+        user.last_name = body.last_name
+
+    if body.email is not None or body.password is not None or body.first_name is not None or body.last_name is not None:
+        session.commit()
+
+    return user.to_json()
 
 
 @app.delete("/api/admin/users/<int:user_id>")

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from os import urandom
 
-from sqlalchemy import Column, Integer, Boolean, String, create_engine, ForeignKey, Float, DateTime
+from sqlalchemy import Column, Integer, Boolean, String, ForeignKey, Float, DateTime
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 
@@ -23,6 +23,15 @@ class User(ModelsBase):
     first_name: str = Column(String(64), nullable=False)
     last_name: str = Column(String(64), nullable=False)
     is_admin: bool = Column(Boolean, default=False)
+
+    def to_json(self) -> dict:
+        return {
+            "id": self.id,
+            "email": self.email,
+            "first_name": self.first_name,
+            "last_name": self.last_name,
+            "is_admin": self.is_admin,
+        }
 
 
 class UserSession(ModelsBase):

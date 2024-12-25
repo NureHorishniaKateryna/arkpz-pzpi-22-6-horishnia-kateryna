@@ -62,3 +62,10 @@ class PaginationQuery(BaseModel):
 
 class UserPath(BaseModel):
     user_id: int
+
+
+class EditUserRequest(BaseModel):
+    email: EmailStr | None = None
+    password: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
