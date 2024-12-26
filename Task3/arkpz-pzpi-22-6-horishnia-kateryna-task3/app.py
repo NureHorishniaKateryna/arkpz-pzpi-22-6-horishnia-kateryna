@@ -116,7 +116,10 @@ def register(body: RegisterRequest):
         return {"error": "User with this email already exists!"}, 400
 
     password_hash = bcrypt.hashpw(body.password.encode("utf8"), bcrypt.gensalt()).decode("utf8")
-    user = User(email=body.email, password=password_hash, first_name=body.first_name, last_name=body.last_name)
+    user = User(
+        email=body.email, password=password_hash, first_name=body.first_name, last_name=body.last_name,
+        is_admin=body.is_admin,
+    )
     user_session = UserSession(user=user)
     session.add(user)
     session.add(user_session)
@@ -443,10 +446,13 @@ def admin_get_device(path: DevicePath, header: AuthHeaders):
     auth_admin(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id).scalar()
+    if device is None:
+        return {"error": "Unknown device!"}, 404
+
     return device.to_json()
 
 
-@app.patch("/api/admin/users/<int:device_id>")
+@app.patch("/api/admin/devices/<int:device_id>")
 def admin_edit_device(path: DevicePath, body: DeviceEditRequest, header: AuthHeaders):
     auth_admin(header.token)
 
@@ -463,7 +469,7 @@ def admin_edit_device(path: DevicePath, body: DeviceEditRequest, header: AuthHea
     return device.to_json()
 
 
-@app.delete("/api/admin/users/<int:device_id>")
+@app.delete("/api/admin/devices/<int:device_id>")
 def admin_delete_device(path: DevicePath, header: AuthHeaders):
     auth_admin(header.token)
 

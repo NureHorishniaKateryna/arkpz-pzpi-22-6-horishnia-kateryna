@@ -7,6 +7,8 @@ class RegisterRequest(BaseModel):
     first_name: str
     last_name: str
 
+    is_admin: bool = False
+
 
 class UserDevicesQuery(BaseModel):
     page: int = 1
