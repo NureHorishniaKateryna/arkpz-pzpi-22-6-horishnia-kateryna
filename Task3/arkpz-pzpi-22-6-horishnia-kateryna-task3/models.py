@@ -91,6 +91,7 @@ class DeviceSchedule(ModelsBase):
 
     def to_json(self) -> dict:
         return {
+            "id": self.id,
             "start_hour": self.start_hour,
             "end_hour": self.end_hour,
         }

@@ -1,15 +1,13 @@
 import json
-import logging
+import ssl
 from datetime import datetime, UTC
 from os import environ
 from time import time
-import ssl
 
 import bcrypt
 import jwt
 from flask_mqtt import Mqtt
 from flask_openapi3 import OpenAPI
-from paho.mqtt.client import MQTTv31, MQTTv311
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -18,8 +16,6 @@ from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration
 from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateRequest, AuthHeaders, DeviceEditRequest, \
     DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery, \
     DeviceReportRequest, PaginationQuery, UserPath, EditUserRequest
-
-logging.basicConfig(level=logging.DEBUG)
 
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
@@ -281,11 +277,8 @@ def add_device_schedule_item(path: DevicePath, body: DeviceScheduleAddRequest, h
     return schedule.to_json()
 
 
-@app.post("/api/devices/<int:device_id>/schedule/<int:schedule_id>")
-def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddRequest, header: AuthHeaders):
-    if body.start_hour >= body.end_hour:
-        return {"error": "End hour cannot be less than start hour!"}, 400
-
+@app.delete("/api/devices/<int:device_id>/schedule/<int:schedule_id>")
+def delete_device_schedule_item(path: SchedulePath, header: AuthHeaders):
     user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
@@ -442,4 +435,4 @@ def admin_delete_device(path: DevicePath, header: AuthHeaders):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=9090, debug=True, reload=True)
+    app.run(host="0.0.0.0", port=9090, debug=True)
