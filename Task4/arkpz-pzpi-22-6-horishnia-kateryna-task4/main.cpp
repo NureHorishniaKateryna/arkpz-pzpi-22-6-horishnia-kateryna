@@ -15,6 +15,8 @@ const std::string MQTT_USER = getenv("MQTT_USER");
 const std::string MQTT_PASS = getenv("MQTT_PASS");
 constexpr time_t TRIGGER_TIMEOUT = 10;
 
+bool schedule[24] = {false};
+
 std::atomic<bool> triggered(false);
 std::atomic<bool> manual_state(false);
 std::condition_variable cv;
@@ -52,11 +54,52 @@ std::string curlRequest(const std::string& endpoint) {
     return response;
 }
 
+void resetSchedule() {
+    for(int32_t i = 0; i <= 24; i++) {
+        schedule[i] = false;
+    }
+}
+
+void fetchSchedule() {
+    std::string sched_str = curlRequest("/device/schedule");
+    nlohmann::json sched;
+
+    try {
+        sched = nlohmann::json::parse(sched_str);
+        std::cout << "Schedule fetched from server" << std::endl;
+    } catch (const nlohmann::json::parse_error& e) {
+        std::cerr << "Failed to parse schedule: " << e.what() << std::endl;
+    }
+
+    resetSchedule();
+
+    for(auto sched_item : sched) {
+        int32_t start_hour;
+        int32_t end_hour;
+
+        try {
+            start_hour = sched_item["start_hour"].get<int32_t>();
+            end_hour = sched_item["end_hour"].get<int32_t>();
+        } catch (const nlohmann::json::type_error& e) {
+            continue;
+        }
+
+        if(start_hour < 0 || start_hour > 23 || end_hour < 0 || end_hour > 23 || start_hour > end_hour) {
+            continue;
+        }
+
+        for(int32_t i = start_hour; i <= end_hour; i++) {
+            schedule[i] = true;
+        }
+    }
+}
+
 void deviceLoop() {
     int64_t trigger_expires_at = 0;
 
     while(true) {
-        bool enabled = current_state;
+        bool enabled = false;
+
         if(triggered.load()) {
             enabled = true;
             trigger_expires_at = time(nullptr) + TRIGGER_TIMEOUT;
@@ -68,13 +111,15 @@ void deviceLoop() {
             enabled = manual_state.load();
         }
 
-        // TODO: schedule
+        std::time_t t = std::time(nullptr);
+        const std::tm* now = std::localtime(&t);
+        enabled = enabled || schedule[now->tm_hour];
 
         if(current_state != enabled) {
             std::cout << "New state: " << enabled << std::endl;
+            current_state.store(enabled);
+            cv.notify_all();
         }
-        current_state.store(enabled);
-        cv.notify_all();
     }
 }
 
@@ -98,6 +143,7 @@ void mqttHandler() {
             }
         } else if(msg->get_topic().starts_with("schedule/")) {
             std::cout << "Got schedule update request from server: " << msg->get_payload_str() << std::endl;
+            fetchSchedule();
         }
     });
 
@@ -120,7 +166,8 @@ void mqttHandler() {
             std::unique_lock<std::mutex> lock(cv_mutex);
             bool enabled = cv.wait_for(lock, std::chrono::seconds(1), [] { return current_state.load(); });
             if (enabled) {
-                enabled_at = time(nullptr);
+                if(enabled != last_enabled)
+                    enabled_at = time(nullptr);
                 state["enabled"] = true;
                 state["enabled_for"] = nullptr;
             } else {
@@ -164,6 +211,8 @@ int main() {
         std::cerr << "Failed to parse configuration: " << e.what() << std::endl;
         return 1;
     }
+
+    fetchSchedule();
 
     std::thread deviceThread(deviceLoop);
     std::thread mqttThread(mqttHandler);
