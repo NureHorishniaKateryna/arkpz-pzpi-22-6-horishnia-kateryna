@@ -1,6 +1,6 @@
 import json
 import ssl
-from datetime import datetime, UTC
+from datetime import datetime, UTC, date, timedelta
 from os import environ
 from time import time
 
@@ -8,7 +8,7 @@ import bcrypt
 import jwt
 from flask_mqtt import Mqtt
 from flask_openapi3 import OpenAPI
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, extract
 from sqlalchemy.orm import sessionmaker
 
 from errors import NotAuthorizedError
@@ -36,10 +36,7 @@ ModelsBase.metadata.create_all(engine)
 DBSession = sessionmaker(engine)
 session = DBSession()
 
-
-#@mqtt.on_log()
-#def handle_logging(client, userdata, level, buf):
-#    print(f"{level}: {buf}")
+POWER_CONSUMPTION = 5  # In watts
 
 
 @mqtt.on_connect()
@@ -309,6 +306,46 @@ def get_device_reports(path: DevicePath, query: DeviceReportsQuery, header: Auth
     }
 
 
+@app.get("/api/devices/<int:device_id>/analytics")
+def get_device_analytics(path: DevicePath, header: AuthHeaders):
+    user = auth_user(header.token)
+
+    device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
+
+    base_query = session.query(DeviceReport.enabled_for)\
+        .filter_by(device=device).filter(DeviceReport.enabled_for != None)
+
+    this_month = base_query.filter(extract("month", DeviceReport.time) == date.today().month)
+    last_28_days = base_query.filter(DeviceReport.time > (date.today() - timedelta(days=28)))
+
+    this_month_count = this_month.count()
+    last_28_days_count = last_28_days.count()
+    this_month_enabled_time = sum(*zip(*this_month.all()))
+    last_28_days_enabled_time = sum(*zip(*last_28_days.all()))
+
+    _1_HOUR = 60 * 60
+
+    this_month_electricity_consumption = this_month_enabled_time / _1_HOUR * POWER_CONSUMPTION
+    last_28_days_electricity_consumption = last_28_days_enabled_time / _1_HOUR * POWER_CONSUMPTION
+
+    return {
+        "this_month": {
+            "enable_count": this_month_count,
+            "total_enabled_time": this_month_enabled_time,
+            "average_enabled_time": int(this_month_enabled_time / this_month_count) if this_month_count else 0,
+            "electricity_consumption": this_month_electricity_consumption,
+            "electricity_price": this_month_electricity_consumption / 1000 * device.configuration.electricity_price,
+        },
+        "last_28_days": {
+            "enable_count": last_28_days_count,
+            "total_enabled_time": last_28_days_enabled_time,
+            "average_enabled_time": int(last_28_days_enabled_time / last_28_days_count) if last_28_days_count else 0,
+            "electricity_consumption": last_28_days_electricity_consumption,
+            "electricity_price": last_28_days_electricity_consumption / 1000 * device.configuration.electricity_price,
+        }
+    }
+
+
 @app.get("/api/device/config")
 def get_device_config(header: AuthHeaders):
     device = auth_device(header.token)
@@ -321,7 +358,7 @@ def report_device_state(body: DeviceReportRequest, header: AuthHeaders):
 
     report = DeviceReport(
         device=device, time=datetime.now(UTC), enabled=body.enabled,
-        enabled_for=body.enabled_for if body.enabled else None
+        enabled_for=body.was_enabled_for if body.enabled else None
     )
     session.add(report)
     session.commit()
