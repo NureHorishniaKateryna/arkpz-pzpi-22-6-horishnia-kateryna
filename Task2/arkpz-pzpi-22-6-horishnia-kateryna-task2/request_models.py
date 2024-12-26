@@ -53,3 +53,19 @@ class DeviceReportsQuery(BaseModel):
 class DeviceReportRequest(BaseModel):
     enabled: bool
     was_enabled_for: int | None = None
+
+
+class PaginationQuery(BaseModel):
+    page: int = 1
+    page_size: int = 25
+
+
+class UserPath(BaseModel):
+    user_id: int
+
+
+class EditUserRequest(BaseModel):
+    email: EmailStr | None = None
+    password: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None

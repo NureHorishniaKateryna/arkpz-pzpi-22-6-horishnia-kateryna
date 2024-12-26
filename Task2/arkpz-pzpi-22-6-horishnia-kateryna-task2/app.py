@@ -1,8 +1,12 @@
+import json
+import ssl
 from datetime import datetime, UTC
+from os import environ
 from time import time
 
 import bcrypt
 import jwt
+from flask_mqtt import Mqtt
 from flask_openapi3 import OpenAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -10,17 +14,66 @@ from sqlalchemy.orm import sessionmaker
 from errors import NotAuthorizedError
 from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration, DeviceSchedule, DeviceReport
 from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateRequest, AuthHeaders, DeviceEditRequest, \
-    DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery, DeviceReportRequest
+    DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery, \
+    DeviceReportRequest, PaginationQuery, UserPath, EditUserRequest
 
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
-JWT_KEY = b"0123456789abcdef"  # urandom(16)
-# app.config["SQLALCHEMY_DATABASE_URL"] = "sqlite://test.db"
+JWT_KEY = b"0123456789abcdef"
+app.config["MQTT_BROKER_URL"] = environ["MQTT_HOST"]
+app.config["MQTT_BROKER_PORT"] = int(environ["MQTT_PORT"])
+app.config["MQTT_USERNAME"] = environ["MQTT_USER"]
+app.config["MQTT_PASSWORD"] = environ["MQTT_PASSWORD"]
+app.config["MQTT_KEEPALIVE"] = 60
+app.config["MQTT_TLS_ENABLED"] = True
+app.config["MQTT_TLS_INSECURE"] = False
+app.config["MQTT_TLS_VERSION"] = ssl.PROTOCOL_TLSv1_2
+
+mqtt = Mqtt(app)
 
 engine = create_engine("sqlite:///test.db")
 ModelsBase.metadata.create_all(engine)
 DBSession = sessionmaker(engine)
 session = DBSession()
+
+
+#@mqtt.on_log()
+#def handle_logging(client, userdata, level, buf):
+#    print(f"{level}: {buf}")
+
+
+@mqtt.on_connect()
+def handle_mqtt_connect(client, userdata, flags, rc):
+    mqtt.subscribe("lights-reports")
+
+
+@mqtt.on_message()
+def handle_mqtt_message(client, userdata, message):
+    try:
+        payload = json.loads(message.payload)
+    except ValueError:
+        return
+
+    if message.topic != "lights-reports":
+        return
+
+    if "enabled" not in payload or "enabled_for" not in payload or "token" not in payload:
+        return
+
+    if not isinstance(payload["enabled"], bool) or not isinstance(payload["enabled_for"], (int, type(None))):
+        return
+
+    try:
+        device = auth_device(payload["token"])
+    except NotAuthorizedError:
+        return
+
+    report = DeviceReport(
+        device=device, time=datetime.now(UTC), enabled=payload["enabled"],
+        enabled_for=payload["enabled_for"] if payload["enabled"] else None
+    )
+    session.add(report)
+    session.commit()
 
 
 @app.errorhandler(NotAuthorizedError)
@@ -175,6 +228,7 @@ def edit_device_config(path: DevicePath, body: DeviceConfigEditRequest, header: 
     if body.enabled_manually is not None or body.enabled_auto is not None or body.electricity_price is not None:
         session.commit()
 
+    mqtt.publish(f"config/{device.id}/{device.api_key}", json.dumps(device.configuration.to_json()).encode("utf8"))
     return device.to_json()
 
 
@@ -215,14 +269,16 @@ def add_device_schedule_item(path: DevicePath, body: DeviceScheduleAddRequest, h
     session.add(schedule)
     session.commit()
 
+    mqtt.publish(f"schedule/{device.id}/{device.api_key}", json.dumps({
+        "action": "add",
+        **schedule.to_json(),
+    }).encode("utf8"))
+
     return schedule.to_json()
 
 
-@app.post("/api/devices/<int:device_id>/schedule/<int:schedule_id>")
-def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddRequest, header: AuthHeaders):
-    if body.start_hour >= body.end_hour:
-        return {"error": "End hour cannot be less than start hour!"}, 400
-
+@app.delete("/api/devices/<int:device_id>/schedule/<int:schedule_id>")
+def delete_device_schedule_item(path: SchedulePath, header: AuthHeaders):
     user = auth_user(header.token)
 
     device = session.query(IotDevice).filter_by(id=path.device_id, user=user).join(DeviceConfiguration).scalar()
@@ -230,6 +286,9 @@ def delete_device_schedule_item(path: SchedulePath, body: DeviceScheduleAddReque
         return {"error": "Unknown device!"}, 404
 
     session.query(DeviceSchedule).filter_by(device=device, id=path.schedule_id).delete()
+    mqtt.publish(f"schedule/{device.id}/{device.api_key}", json.dumps({
+        "action": "refetch",
+    }).encode("utf8"))
 
     return "", 204
 
@@ -271,60 +330,109 @@ def report_device_state(body: DeviceReportRequest, header: AuthHeaders):
 
 
 @app.get("/api/admin/users")
-def admin_get_users(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_get_users(query: PaginationQuery, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    query_ = session.query(User).order_by("id")
+
+    count = query_.count()
+    query_ = query_.limit(query.page_size).offset((query.page - 1) * query.page_size)
+
+    return {
+        "count": count,
+        "result": [user.to_json() for user in query_.all()],
+    }
 
 
 @app.get("/api/admin/users/<int:user_id>")
-def admin_get_user(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_get_user(path: UserPath, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    user = session.query(User).filter_by(id=path.user_id).scalar()
+    if user is None:
+        return {"error": "Unknown user!"}, 404
+
+    return user.to_json()
 
 
 @app.patch("/api/admin/users/<int:user_id>")
-def admin_edit_user(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_edit_user(path: UserPath, body: EditUserRequest, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    user = session.query(User).filter_by(id=path.user_id).scalar()
+    if user is None:
+        return {"error": "Unknown user!"}, 404
+
+    if body.email is not None:
+        user.email = body.email
+    if body.password is not None:
+        user.password = bcrypt.hashpw(body.password.encode("utf8"), bcrypt.gensalt())
+    if body.first_name is not None:
+        user.first_name = body.first_name
+    if body.last_name is not None:
+        user.last_name = body.last_name
+
+    if body.email is not None or body.password is not None or body.first_name is not None or body.last_name is not None:
+        session.commit()
+
+    return user.to_json()
 
 
 @app.delete("/api/admin/users/<int:user_id>")
-def admin_delete_user(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_delete_user(path: UserPath, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    session.query(User).filter_by(id=path.user_id).delete()
+    return "", 204
 
 
 @app.get("/api/admin/devices")
-def admin_get_devices(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_get_devices(query: PaginationQuery, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    query_ = session.query(IotDevice).order_by("id")
+
+    count = query_.count()
+    query_ = query_.limit(query.page_size).offset((query.page - 1) * query.page_size)
+
+    return {
+        "count": count,
+        "result": [device.to_json() for device in query_.all()],
+    }
 
 
 @app.get("/api/admin/devices/<int:device_id>")
-def admin_get_device(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_get_device(path: DevicePath, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    device = session.query(IotDevice).filter_by(id=path.device_id).scalar()
+    return device.to_json()
 
 
 @app.patch("/api/admin/users/<int:device_id>")
-def admin_edit_device(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_edit_device(path: DevicePath, body: DeviceEditRequest, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    device = session.query(IotDevice).filter_by(id=path.device_id).scalar()
+    if device is None:
+        return {"error": "Unknown device!"}, 404
+
+    if body.name is not None:
+        device.name = body.name
+
+    if body.name is not None:
+        session.commit()
+
+    return device.to_json()
 
 
 @app.delete("/api/admin/users/<int:device_id>")
-def admin_delete_device(header: AuthHeaders):
-    user = auth_admin(header.token)
+def admin_delete_device(path: DevicePath, header: AuthHeaders):
+    auth_admin(header.token)
 
-    # TODO
+    session.query(IotDevice).filter_by(id=path.device_id).delete()
+    return "", 204
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=9090, debug=True, reload=True)
+    app.run(host="0.0.0.0", port=9090, debug=True)
