@@ -15,7 +15,7 @@ from errors import NotAuthorizedError
 from models import ModelsBase, User, UserSession, IotDevice, DeviceConfiguration, DeviceSchedule, DeviceReport
 from request_models import RegisterRequest, UserDevicesQuery, DeviceCreateRequest, AuthHeaders, DeviceEditRequest, \
     DeviceConfigEditRequest, DevicePath, DeviceScheduleAddRequest, SchedulePath, DeviceReportsQuery, \
-    DeviceReportRequest, PaginationQuery, UserPath, EditUserRequest
+    DeviceReportRequest, PaginationQuery, UserPath, EditUserRequest, LoginRequest
 
 app = OpenAPI(__name__, doc_prefix="/docs")
 JWT_EXPIRE_TIME = 60 * 60 * 24
@@ -67,7 +67,7 @@ def handle_mqtt_message(client, userdata, message):
 
     report = DeviceReport(
         device=device, time=datetime.now(UTC), enabled=payload["enabled"],
-        enabled_for=payload["enabled_for"] if payload["enabled"] else None
+        enabled_for=payload["enabled_for"] if not payload["enabled"] else None
     )
     session.add(report)
     session.commit()
@@ -135,7 +135,7 @@ def register(body: RegisterRequest):
 
 
 @app.post("/api/auth/login")
-def login(body: RegisterRequest):
+def login(body: LoginRequest):
     user = session.query(User).filter_by(email=body.email).scalar()
     if user is None:
         return {"error": "User with this credentials does not exist!"}, 400
@@ -228,7 +228,7 @@ def edit_device_config(path: DevicePath, body: DeviceConfigEditRequest, header: 
     if body.enabled_manually is not None or body.enabled_auto is not None or body.electricity_price is not None:
         session.commit()
 
-    mqtt.publish(f"config/{device.id}/{device.api_key}", json.dumps(device.configuration.to_json()).encode("utf8"))
+    mqtt.publish(f"config/{device.id}.{device.api_key}", json.dumps(device.configuration.to_json()).encode("utf8"))
     return device.to_json()
 
 
@@ -269,7 +269,7 @@ def add_device_schedule_item(path: DevicePath, body: DeviceScheduleAddRequest, h
     session.add(schedule)
     session.commit()
 
-    mqtt.publish(f"schedule/{device.id}/{device.api_key}", json.dumps({
+    mqtt.publish(f"schedule/{device.id}.{device.api_key}", json.dumps({
         "action": "add",
         **schedule.to_json(),
     }).encode("utf8"))
@@ -286,7 +286,7 @@ def delete_device_schedule_item(path: SchedulePath, header: AuthHeaders):
         return {"error": "Unknown device!"}, 404
 
     session.query(DeviceSchedule).filter_by(device=device, id=path.schedule_id).delete()
-    mqtt.publish(f"schedule/{device.id}/{device.api_key}", json.dumps({
+    mqtt.publish(f"schedule/{device.id}.{device.api_key}", json.dumps({
         "action": "refetch",
     }).encode("utf8"))
 
@@ -355,13 +355,20 @@ def get_device_config(header: AuthHeaders):
     return device.configuration.to_json()
 
 
+@app.get("/api/device/schedule")
+def get_device_schedule_(header: AuthHeaders):
+    device = auth_device(header.token)
+    schedule_items = session.query(DeviceSchedule).filter_by(device=device).order_by("start_hour").all()
+    return [schedule.to_json() for schedule in schedule_items]
+
+
 @app.post("/api/device/report")
 def report_device_state(body: DeviceReportRequest, header: AuthHeaders):
     device = auth_device(header.token)
 
     report = DeviceReport(
         device=device, time=datetime.now(UTC), enabled=body.enabled,
-        enabled_for=body.was_enabled_for if body.enabled else None
+        enabled_for=body.was_enabled_for if not body.enabled else None
     )
     session.add(report)
     session.commit()
@@ -478,4 +485,4 @@ def admin_delete_device(path: DevicePath, header: AuthHeaders):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=9090, debug=True)
+    app.run(host="0.0.0.0", port=9090, debug=False)

@@ -10,6 +10,11 @@ class RegisterRequest(BaseModel):
     is_admin: bool = False
 
 
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
 class UserDevicesQuery(BaseModel):
     page: int = 1
     page_size: int = 25
