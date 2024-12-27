@@ -1,0 +1,30 @@
+version: '3'
+
+services:
+  database:
+    image: postgres:17.2
+    restart: unless-stopped
+    volumes: ['db_data:/var/lib/postgresql/data']
+    environment:
+      - PGDATA=/var/lib/postgresql/data
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=lights
+      - POSTGRES_USER=${POSTGRES_USER}
+  hhb:
+    build: .
+    pull_policy: build
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      - DATABASE=postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@database/lights
+      - JWT_KEY=${JWT_KEY}
+      - MQTT_HOST=${MQTT_HOST}
+      - MQTT_PORT=${MQTT_PORT}
+      - MQTT_USER=${MQTT_USER}
+      - MQTT_PASSWORD=${MQTT_PASSWORD}
+    depends_on:
+      - database
+
+volumes:
+  db_data:
