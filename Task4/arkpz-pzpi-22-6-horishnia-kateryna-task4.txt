@@ -81,8 +81,7 @@ IoT-клієнт буде розроблений як частина прогр�
  6           sched = nlohmann::json::parse(sched_str);
  7           std::cout << "Schedule fetched from server" << std::endl;
  8       } catch (const nlohmann::json::parse_error& e) {
- 9           std::cerr << "Failed to parse schedule: " << e.what()                       
-    << std::endl;
+ 9           std::cerr << "Failed to parse schedule: " << e.what() << std::endl;
 10       }
 11   
 12       resetSchedule();
@@ -98,8 +97,7 @@ IoT-клієнт буде розроблений як частина прогр�
 22               continue;
 23           }
 24   
-25           if(start_hour < 0 || start_hour > 23 || end_hour < 0 
-    || end_hour > 23 || start_hour > end_hour) {
+25           if(start_hour < 0 || start_hour > 23 || end_hour < 0 || end_hour > 23 || start_hour > end_hour) {
 26               continue;
 27           }
 28   
@@ -110,21 +108,17 @@ IoT-клієнт буде розроблений як частина прогр�
  1   client.set_message_callback([](const mqtt::const_message_ptr& 
     msg) {
  2       if(msg->get_topic().starts_with("config/")) {
- 3           std::cout << "Got config update from server: " << msg-
-    >get_payload_str() << std::endl;
+ 3           std::cout << "Got config update from server: " << msg->get_payload_str() << std::endl;
  4   
  5           try {
  6               auto jsonConfig = nlohmann::json::parse(msg-
     >get_payload_str());
- 7               manual_state.store(jsonConfig["enabled_manually"]
-.   get<bool>());
+ 7               manual_state.store(jsonConfig["enabled_manually"].get<bool>());
  8           } catch (const nlohmann::json::parse_error& e) {
- 9               std::cerr << "Failed to parse config: " << e.what() 
-    << std::endl;
+ 9               std::cerr << "Failed to parse config: " << e.what() << std::endl;
 10           }
 11       } else if(msg->get_topic().starts_with("schedule/")) {
-12           std::cout << "Got schedule update request from server: 
-    " << msg->get_payload_str() << std::endl;
+12           std::cout << "Got schedule update request from server: " << msg->get_payload_str() << std::endl;
 13           fetchSchedule();
 14       }
 15   });
@@ -135,12 +129,10 @@ IoT-клієнт буде розроблений як частина прогр�
  3   
  4   try {
  5       auto jsonConfig = nlohmann::json::parse(config);
- 6       std::cout << "Configuration fetched: " << jsonConfig.dump(4) 
-     << std::endl;
+ 6       std::cout << "Configuration fetched: " << jsonConfig.dump(4) << std::endl;
  7  manual_state.store(jsonConfig["enabled_manually"].get<bool>());
  8   } catch (const nlohmann::json::parse_error& e) {
- 9       std::cerr << "Failed to parse configuration: " << e.what() 
-    << std::endl;
+ 9       std::cerr << "Failed to parse configuration: " << e.what() << std::endl;
 10       return 1;
 11   }
  
