@@ -191,9 +191,11 @@ DELETE	/api/devices/{device_id}/schedule/{schedule_id}	Видалення кон
 1.4 Список використаних джерел 
 1. PostgreSQL – офіційна документація. URL: https://www.postgresql. org/docs/ (дата звернення: 19.12.2024).
 2. Swagger – офіційний сайт. URL: https://swagger.io/ (дата звернення: 19.12.2024).
-3. Flask – офіційна документація. URL: https://flask.palletsprojects.com/ (дата звернення: 19.12.2024).
+3. Python – офіційний сайт. URL: https://www.python.org/ (дата звернення: 19.12.2024).
+4. Flask – офіційна документація. URL: https://flask.palletsprojects.com/ (дата звернення: 19.12.2024).
+5. SQLAlchemy – офіційна документація. URL: https://www.sqlalchemy.org/ (дата звернення: 19.12.2024).
 
 1.5 Посилання
 Посилання на GitHub репозиторій: 
 https://github.com/NureHorishniaKateryna/arkpz-pzpi-22-6-horishnia-kateryna/tree/main/Task2
-Посилання на відео доповіді: https://youtu.be/
+Посилання на відео доповіді: https://youtu.be/1V61qAaRE3s
