@@ -171,5 +171,6 @@ IoT-клієнт буде розроблений як частина прогр�
 
 1.5 Посилання
 Посилання на GitHub репозиторій: 
-https://github.com/NureHorishniaKateryna/arkpz-pzpi-22-6-horishnia-kateryna/tree/main/Task2
-Посилання на відео доповіді: https://youtu.be/
+https://github.com/NureHorishniaKateryna/arkpz-pzpi-22-6-horishnia-kateryna/tree/main/Task4
+Посилання на відео доповіді: https://youtu.be/tXDcV4rIvOA
+
